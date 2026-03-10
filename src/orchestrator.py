@@ -17,9 +17,31 @@ def generator_node(state: DesignState):
     return {"current_phase": "validation", "draft_design": {"wet_mass_kg": 15000, "engine_type": "bipropellant"}}
 
 def validator_node(state: DesignState):
-    # Independent LLM or deterministic check verifies the draft design against physics limits
-    errors =
-    # If the generator hallucinated numbers that don't match the Tsiolkovsky output, flag an error
+    draft = state.get("draft_design", {})
+    payload = state.get("payload_mass", 0)
+    
+    # Initialize the errors list correctly
+    errors = []
+    
+    # 1. Check for missing required parameters
+    required_keys = ["wet_mass_kg", "dry_mass_kg", "propellant_mass_kg"]
+    for key in required_keys:
+        if key not in draft:
+            errors.append(f"Missing required design parameter: {key}")
+            
+    # 2. Physical boundary constraint: Wet mass must be greater than the payload
+    wet_mass = draft.get("wet_mass_kg", 0)
+    if wet_mass <= payload:
+        errors.append(f"Physical violation: Wet mass ({wet_mass} kg) must be strictly greater than payload mass ({payload} kg).")
+        
+    # 3. Mass conservation constraint: Wet Mass = Dry Mass + Propellant
+    if all(k in draft for k in required_keys):
+        calculated_wet = draft["dry_mass_kg"] + draft["propellant_mass_kg"]
+        # Allow a small tolerance for floating point rounding
+        if abs(calculated_wet - draft["wet_mass_kg"]) > 1.0: 
+            errors.append("Mass conservation violation: dry_mass_kg + propellant_mass_kg does not equal wet_mass_kg.")
+            
+    # Update the explicit state with any caught errors
     return {"validation_errors": errors}
 
 # 3. Define Conditional Edges (Routing Logic)
